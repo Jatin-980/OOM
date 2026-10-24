@@ -1,0 +1,4 @@
+customerID,name,dob,phoneNo,emailId,pin,registrationDate,failedLoginAttempts,isLocked
+1,Aarchi,2006-08-16,8824206567,Aarchi@gmail.com,2006,2026-10-21,0,false
+2,Jatin,2006-09-24,8448544626,jaitn@gmail.com,2222,2026-10-23,0,false
+3,Nandini,2006-06-06,8826171021,Nandini@gmail.com,3333,2026-10-23,0,false

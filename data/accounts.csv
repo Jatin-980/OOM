@@ -1,0 +1,4 @@
+accountNo,customerId,accountType,balance,status,openedDate,linkedSavingsAccountNo,tenureMonths
+2000,1,CURRENT,1.0E7,ACTIVE,2026-10-21,-1,0
+2001,3,SAVINGS,2.00229E7,ACTIVE,2026-10-23,-1,0
+2002,2,CURRENT,1227200.0,ACTIVE,2026-10-23,-1,0

@@ -1,0 +1,14 @@
+
+==================== ACCOUNT STATEMENT ====================
+Customer Name   : Jatin (ID: 2)
+Account Number  : 2002 (CURRENT)
+Statement Period: 2005-01-01 to 2026-02-02
+-----------------------------------------------------------
+Opening Balance : Rs. 0.00
+-----------------------------------------------------------
+No transactions recorded during this period.
+-----------------------------------------------------------
+Total Credits   : Rs. 0.00
+Total Debits    : Rs. 0.00
+Closing Balance : Rs. 0.00
+===========================================================
