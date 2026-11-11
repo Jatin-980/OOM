@@ -7,17 +7,15 @@ public class Main {
         
 
         Scanner sc = new Scanner(System.in);
-        Bank bank = new Bank();
+        Bank bank = Bank.getInstance();
         BankStorage.loadData(bank);
         int choice = -1;
 
+        ConsoleUI.printAppBanner();
         while(true){
-
-            System.out.println("===============MAIN MENU===============");
-            System.out.println("1. Bank Operator Menu ");
-            System.out.println("2. Customer Login     ");
-            System.out.println("3. Exit               ");
-            System.out.print("Enter your choice : ");
+            ConsoleUI.printMenuHeader("MAIN MENU");
+            ConsoleUI.printMenuCard("BANKING ENGINE", "Bank Operator Menu", "Customer Login", "Exit");
+            ConsoleUI.printPrompt();
 
             if(sc.hasNextInt()){
                 choice = sc.nextInt();
@@ -30,18 +28,18 @@ public class Main {
                     
                 }
                 else if(choice==3){
-                    System.out.println("Saving data...");
+                    ConsoleUI.printInfo("Saving data...");
                     // Save data on exit
                     BankStorage.saveData(bank);
-                    System.out.println("Exiting system !!");
+                    ConsoleUI.printSuccess("Exiting system.");
                     break;
                 }
                 else{
-                    System.out.println("You Entered wrong choice , try again !!");
+                    ConsoleUI.printError("You entered an invalid choice. Please try again.");
                 }
             }
             else{
-                System.out.println("Invalid input , try again !!");
+                ConsoleUI.printError("Invalid input. Please try again.");
                 sc.nextLine();
             }
         }
@@ -51,5 +49,4 @@ public class Main {
 
     }
 }
-
 

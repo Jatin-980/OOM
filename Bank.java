@@ -9,14 +9,31 @@ import java.util.HashMap;
 
 
 public class Bank {
+    // Singleton instance
+    private static Bank instance;
+
     // customer id mapped to customer
     private Map<Integer, Customer> customersMap = new HashMap<>();
     private Map<Integer, Account> accountMap = new HashMap<>();
     
-    
-    
     private int nextAccountNumber = 2000;
     private int nextCustomerId = 1;
+
+    // Private constructor prevents direct external instantiation (Singleton Pattern)
+    private Bank() {}
+
+    // Global access point to the Singleton instance
+    public static synchronized Bank getInstance() {
+        if (instance == null) {
+            instance = new Bank();
+        }
+        return instance;
+    }
+
+    // Optional reset method for unit testing / test harnesses
+    public static synchronized void resetInstance() {
+        instance = null;
+    }
     
     public void addCustomer(Customer customer){
         int customerId = nextCustomerId++;

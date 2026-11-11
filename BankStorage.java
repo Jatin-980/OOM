@@ -153,16 +153,24 @@ public class BankStorage {
 
                 switch (type) {
                     case SAVINGS:
-                        account = new SavingsAccount(accountNo, customerId, balance, status, opened);
+                        account = AccountFactory.createSavingsAccount(accountNo, customerId, balance, status, opened);
                         break;
                     case CURRENT:
-                        account = new CurrentAccount(accountNo, customerId, balance, status, opened);
+                        account = AccountFactory.createCurrentAccount(accountNo, customerId, balance, status, opened);
                         break;
                     case FIXED_DEPOSIT:
                         int linkedSavings = Integer.parseInt(fields[6]);
                         int tenureMonths = Integer.parseInt(fields[7]);
-                        account = new FixedDepositAccount(
+                        account = AccountFactory.createFixedDepositAccount(
                             accountNo, customerId, balance, status, opened, linkedSavings, tenureMonths
+                        );
+                        break;
+                    case LOAN:
+                        double principal = fields.length > 8 && !fields[8].isBlank() ? Double.parseDouble(fields[8]) : balance;
+                        double rate = fields.length > 9 && !fields[9].isBlank() ? Double.parseDouble(fields[9]) : 10.0;
+                        int duration = fields.length > 10 && !fields[10].isBlank() ? Integer.parseInt(fields[10]) : 12;
+                        account = AccountFactory.createLoan(
+                            accountNo, customerId, balance, status, opened, principal, rate, duration
                         );
                         break;
                 }
@@ -185,17 +193,25 @@ public class BankStorage {
 
     private static void saveAccounts(Map<Integer, Account> accounts) {
         try (BufferedWriter bw = Files.newBufferedWriter(ACCOUNT_FILE)) {
-            bw.write("accountNo,customerId,accountType,balance,status,openedDate,linkedSavingsAccountNo,tenureMonths");
+            bw.write("accountNo,customerId,accountType,balance,status,openedDate,linkedSavingsAccountNo,tenureMonths,principalAmount,interestRate,loanDurationInMonths");
             bw.newLine();
 
             for (Account acc : accounts.values()) {
                 int linkedSavings = -1;
                 int tenureMonths = 0;
+                double principal = 0.0;
+                double rate = 0.0;
+                int loanDuration = 0;
 
                 if (acc instanceof FixedDepositAccount) {
                     FixedDepositAccount fd = (FixedDepositAccount) acc;
                     linkedSavings = fd.getLinkedSavingsAccountNo();
                     tenureMonths = fd.getTenureMonths();
+                } else if (acc instanceof Loan) {
+                    Loan loan = (Loan) acc;
+                    principal = loan.getPrincipalAmount();
+                    rate = loan.getInterestRate();
+                    loanDuration = loan.getLoanDurationInMonths();
                 }
 
                 bw.write(
@@ -206,7 +222,10 @@ public class BankStorage {
                     acc.getStatus() + "," +
                     acc.getOpened() + "," +
                     linkedSavings + "," +
-                    tenureMonths
+                    tenureMonths + "," +
+                    principal + "," +
+                    rate + "," +
+                    loanDuration
                 );
                 bw.newLine();
             }

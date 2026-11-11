@@ -107,6 +107,10 @@ public abstract class Account {
         return balance;
     }
 
+    public double balanceEnquiry() {
+        return balance;
+    }
+
     public void setBalance(double balance) {
         this.balance = balance;
     }
@@ -127,10 +131,21 @@ public abstract class Account {
         this.opened = opened;
     }
 
+    /**
+     * Polymorphic method to return specific account details without requiring
+     * external instanceof checks (satisfies Liskov Substitution Principle and Open/Closed Principle).
+     *
+     * @return Specific details string for this account type.
+     */
+    public String getSpecificDetails() {
+        return "";
+    }
+
     public enum AccountType {
         SAVINGS,
         CURRENT,
-        FIXED_DEPOSIT
+        FIXED_DEPOSIT,
+        LOAN
     }
     
     public enum AccountStatus {

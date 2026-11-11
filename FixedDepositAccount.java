@@ -72,4 +72,10 @@ public class FixedDepositAccount extends Account {
     public double getInterestRate() {
         return interestRate;
     }
+
+    @Override
+    public String getSpecificDetails() {
+        return String.format("Tenure: %d months, Interest Rate: %.1f%% p.a., Linked Payout: AC%d",
+                tenureMonths, interestRate, linkedSavingsAccountNo);
+    }
 }

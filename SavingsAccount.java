@@ -3,7 +3,7 @@ package Banking_system.Code;
 import java.time.LocalDate;
 import java.time.YearMonth;
 
-public class SavingsAccount extends Account {
+public class SavingsAccount extends Account implements MonthlyInterestBearing {
 
     private static final double MINIMUM_BALANCE = 1000.0;
     private static final double ANNUAL_INTEREST_RATE = 4.0; // 4% per annum
@@ -125,6 +125,24 @@ public class SavingsAccount extends Account {
         }
 
         return interest;
+    }
+
+    @Override
+    public String processMonthlyInterestCycle() {
+        double lowestBal = getLowestBalanceThisMonth();
+        double interest = creditMonthlyInterest();
+        if (interest > 0) {
+            return String.format(
+                "Savings Account %d: Lowest Monthly Balance = Rs. %.2f | Interest Credited = Rs. %.2f | New Balance = Rs. %.2f",
+                getAccountNo(), lowestBal, interest, getBalance()
+            );
+        }
+        return "";
+    }
+
+    @Override
+    public String getSpecificDetails() {
+        return String.format("Min Balance: Rs. %.2f, Interest Rate: %.1f%% p.a.", MINIMUM_BALANCE, ANNUAL_INTEREST_RATE);
     }
     @Override
     public boolean transferOut(double amount, int destAccountNo) {

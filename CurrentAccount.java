@@ -109,4 +109,10 @@ public class CurrentAccount extends Account {
     public static double getDailyLimit() {
         return DAILY_LIMIT;
     }
+
+    @Override
+    public String getSpecificDetails() {
+        return String.format("Min Balance: Rs. %.2f, Overdraft Limit: Rs. %.2f, Overdraft Fee: Rs. %.2f",
+                MINIMUM_BALANCE, Math.abs(OVERDRAFT_LIMIT), OVERDRAFT_FEE);
+    }
 }

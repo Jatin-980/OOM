@@ -1,12 +1,19 @@
 package Banking_system.Code;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.io.IOException;
 
 import Banking_system.Code.Account.AccountStatus;
 import Banking_system.Code.Account.AccountType;
@@ -15,13 +22,17 @@ import Banking_system.Code.Account.AccountType;
 public class OperatorMenu {
 
     private static void printMenu(){
-        System.out.println("1. Create New Customer");
-        System.out.println("2. Open New Account for Existing Customer");
-        System.out.println("3. View All Customers and Accounts (read-only)");
-        System.out.println("4. Unlock a Customer Login");
-        System.out.println("5. Run Monthly Interest");
-        System.out.println("6. Back to Main Menu");
-        System.out.print("Enter your choise : ");
+        ConsoleUI.printMenuHeader("MAIN MENU > BANK OPERATOR PORTAL");
+        ConsoleUI.printMenuCard(
+                "OPERATOR ACTIONS",
+                "Create New Customer",
+                "Open New Account for Existing Customer",
+                "View All Customers and Accounts (read-only)",
+                "Unlock a Customer Login",
+                "Run Monthly Interest",
+                "Export Summary Report (All Customers & Balances)",
+                "Back to Main Menu");
+        ConsoleUI.printPrompt();
     }
 
     private static void create_new_customer(Scanner sc , Bank bank){
@@ -32,10 +43,10 @@ public class OperatorMenu {
         String pin;
 
         while(true){
-            System.out.println("Enter Name : ");
+            ConsoleUI.printPrompt("Enter Name : ");
             name = sc.nextLine();
             if(name.trim().isEmpty()){
-                System.out.println("Name cannot be emtpy !");
+                ConsoleUI.printError("Name cannot be empty.");
                 continue;
             }
             break;
@@ -45,42 +56,42 @@ public class OperatorMenu {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-uuuu").withResolverStyle(ResolverStyle.STRICT);
         while(true){
             try {
-                System.out.println("Enter DOB (dd-MM-yyyy) : ");
+                ConsoleUI.printPrompt("Enter DOB (dd-MM-yyyy) : ");
                 String dobInput = sc.nextLine();
                 dobDate = LocalDate.parse(dobInput , formatter);
 
                 if(dobDate.isAfter(LocalDate.now())){
-                    System.out.println("Date of birth cannot be in future !!");
+                    ConsoleUI.printError("Date of birth cannot be in future.");
                     continue;
                 }
                 
                 if(dobDate.isBefore(LocalDate.of(1916, 9, 19))){
-                    System.out.println("Date of birth is unrealistic ");
+                    ConsoleUI.printError("Date of birth is unrealistic.");
                     continue;
                 }
 
                 int age = Period.between(dobDate, LocalDate.now()).getYears();
                 if(age < 18){
-                    System.out.println("Age must be more than or equal to 18 !!");
+                    ConsoleUI.printError("Age must be more than or equal to 18.");
                     continue;
                 }
                 break;
                 
             }catch(DateTimeParseException e){
-                System.out.println("Error : " + e.getMessage());
+                ConsoleUI.printError("Invalid date: " + e.getMessage());
             }
             
         }
     
         while(true){
-            System.out.println("Enter Phone number (10 digit) : ");
+            ConsoleUI.printPrompt("Enter Phone number (10 digit) : ");
             String inptuPhoneNo = sc.nextLine();
             if(!inptuPhoneNo.matches("[0-9]{10}")){
-                System.out.println("Phone number must contain exactly 10 digits!");
+                ConsoleUI.printError("Phone number must contain exactly 10 digits.");
                 continue;
             }
             if(inptuPhoneNo.startsWith("0")){
-                System.out.println("Phone no cannot start with 0");
+                ConsoleUI.printError("Phone number cannot start with 0.");
                 continue;
             }
             phoneNo = inptuPhoneNo;
@@ -88,10 +99,10 @@ public class OperatorMenu {
         }
 
         while(true){
-            System.out.println("Enter email ID : ");
+            ConsoleUI.printPrompt("Enter email ID : ");
             emailId = sc.nextLine();
             if (!emailId.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
-                System.out.println("Invalid email, try again!");
+                ConsoleUI.printError("Invalid email. Please try again.");
                 continue;
             }
             break;
@@ -99,10 +110,10 @@ public class OperatorMenu {
 
 
         while(true){
-            System.out.println("Enter pin : ");
+            ConsoleUI.printPrompt("Enter pin : ");
             String inputPin = sc.nextLine();
             if (!inputPin.matches("[0-9]{4}")) {
-                System.out.println("PIN must contain exactly 4 digits!");
+                ConsoleUI.printError("PIN must contain exactly 4 digits.");
                 continue;
             }
             pin = inputPin;
@@ -112,30 +123,52 @@ public class OperatorMenu {
         Customer customer = new Customer(name, dobDate, phoneNo, emailId, pin);
         bank.addCustomer(customer);
         BankStorage.saveData(bank);
-        System.out.println("Customer created successfully! Assigned Customer ID: " + customer.getCustomerID());
+        ConsoleUI.printSuccess("Customer created successfully! Assigned Customer ID: "
+                + customer.getCustomerID());
     }   
 
     private static void view_all_customers_and_accounts(Scanner sc , Bank bank){
         Map<Integer, Customer> customers = bank.getCustomersMap();
-        customers.forEach((id, customer) ->{
-            System.out.println("\n========== CUSTOMER DETAILS ==========");
-            System.out.println("Customer ID       : " + customer.getCustomerID());
-            System.out.println("Name              : " + customer.getName());
-            System.out.println("Date of Birth     : " + customer.getDobDate());
-            System.out.println("Registration Date  : " + customer.getRegistrationDate());
-            System.out.println("Phone Number      : " + customer.getPhoneNo());
-            System.out.println("Email ID          : " + customer.getEmailId());
-            System.out.println("Owned Accounts    : " + customer.getOwnedAccountList());
+        ConsoleUI.printSectionHeader("CUSTOMER OVERVIEW");
+        List<String[]> customerRows = new ArrayList<>();
+        List<String[]> accountRows = new ArrayList<>();
+        for (Customer customer : customers.values()) {
+            customerRows.add(new String[]{
+                    String.valueOf(customer.getCustomerID()),
+                    customer.getName(),
+                    String.valueOf(customer.getDobDate()),
+                    customer.getPhoneNo(),
+                    customer.getEmailId(),
+                    String.valueOf(customer.getRegistrationDate()),
+                    customer.isLocked() ? "Locked" : "Active"
+            });
             for (int accNo : customer.getOwnedAccountList()) {
                 Account acc = bank.getAccountMap().get(accNo);
                 if (acc != null) {
-                    System.out.printf("   -> Account %d | Type: %s | Balance: Rs. %.2f | Status: %s%n",
-                        acc.getAccountNo(), acc.getAccountType(), acc.getBalance(), acc.getStatus());
+                    accountRows.add(new String[]{
+                            String.valueOf(acc.getAccountNo()),
+                            String.valueOf(customer.getCustomerID()),
+                            String.valueOf(acc.getAccountType()),
+                            String.valueOf(acc.getStatus()),
+                            String.valueOf(acc.getOpened()),
+                            String.format("%.2f", acc.getBalance()),
+                            acc.getSpecificDetails()
+                    });
                 }
             }
-            System.out.println("=======================================\n");
-            }
-        );
+        }
+        ConsoleUI.printTable(
+                new String[]{"ID", "Name", "DOB", "Phone", "Email", "Reg Date", "Login Status"},
+                customerRows,
+                new int[]{8, 24, 12, 14, 30, 12, 14},
+                -1);
+        ConsoleUI.printSectionHeader("CUSTOMER ACCOUNTS");
+        ConsoleUI.printTable(
+                new String[]{"Acc No", "Owner ID", "Type", "Status", "Opened",
+                        "Balance (Rs.)", "Details"},
+                accountRows,
+                new int[]{9, 10, 16, 12, 12, 17, 34},
+                -1);
     }
 
     private static void open_new_account(Scanner sc, Bank bank) {
@@ -143,13 +176,13 @@ public class OperatorMenu {
 
     // 1. Validate customer ID
     while (true) {
-        System.out.print("Enter Customer ID: ");
+        ConsoleUI.printPrompt("Enter Customer ID: ");
         try {
             customerId = Integer.parseInt(sc.nextLine().trim());
 
             if (!bank.findCustomer(customerId)) {
-                System.out.println("Customer not found.");
-                System.out.print("Try again? (y/n): ");
+                ConsoleUI.printError("Customer not found.");
+                ConsoleUI.printPrompt("Try again? (y/n): ");
                 if (!sc.nextLine().trim().equalsIgnoreCase("y")) {
                     return;
                 }
@@ -157,7 +190,7 @@ public class OperatorMenu {
             }
             break;
         } catch (NumberFormatException e) {
-            System.out.println("Enter a valid numeric customer ID.");
+            ConsoleUI.printError("Enter a valid numeric customer ID.");
         }
     }
     Customer customer = bank.getCustomer(customerId);
@@ -171,14 +204,14 @@ public class OperatorMenu {
 
         // 2. Select account type
         while (true) {
-            System.out.println("\n1. Savings\n2. Current\n3. Fixed Deposit");
-            System.out.print("Enter choice: ");
+            System.out.println("\n1. Savings\n2. Current\n3. Fixed Deposit\n4. Loan");
+            ConsoleUI.printPrompt("Enter choice: ");
 
             try {
                 choice = Integer.parseInt(sc.nextLine().trim());
 
-                if (choice < 1 || choice > 3) {
-                    System.out.println("Choose 1, 2, or 3.");
+                if (choice < 1 || choice > 4) {
+                    ConsoleUI.printError("Choose 1, 2, 3, or 4.");
                     continue;
                 }
 
@@ -197,23 +230,84 @@ public class OperatorMenu {
                     }
 
                     if (hasCurrent) {
-                        System.out.println(
-                            "Customer already has a Current Account.");
+                        ConsoleUI.printError("Customer already has a Current Account.");
                         return;
                     }
                 }
 
                 break;
             } catch (NumberFormatException e) {
-                System.out.println("Enter a valid numeric choice.");
+                ConsoleUI.printError("Enter a valid numeric choice.");
             }
+        }
+
+        AccountStatus status = AccountStatus.ACTIVE;
+        LocalDate opened = LocalDate.now();
+        Account newAccount;
+
+        // Special creation flow for Loan accounts
+        if (choice == 4) {
+            double loanPrincipal;
+            while (true) {
+                ConsoleUI.printPrompt("Enter Loan Principal Amount: Rs. ");
+                try {
+                    loanPrincipal = Double.parseDouble(sc.nextLine().trim());
+                    if (loanPrincipal <= 0) {
+                        ConsoleUI.printError("Principal amount must be positive.");
+                        continue;
+                    }
+                    break;
+                } catch (NumberFormatException e) {
+                    ConsoleUI.printError("Enter a valid numeric amount.");
+                }
+            }
+
+            double interestRate;
+            while (true) {
+                ConsoleUI.printPrompt("Enter Annual Interest Rate (% e.g., 8.5): ");
+                try {
+                    interestRate = Double.parseDouble(sc.nextLine().trim());
+                    if (interestRate <= 0 || interestRate > 100) {
+                        ConsoleUI.printError("Enter a realistic interest rate between 0 and 100.");
+                        continue;
+                    }
+                    break;
+                } catch (NumberFormatException e) {
+                    ConsoleUI.printError("Enter a valid number.");
+                }
+            }
+
+            int loanDuration;
+            while (true) {
+                ConsoleUI.printPrompt("Enter Loan Duration in Months (e.g., 12, 24, 36, 60): ");
+                try {
+                    loanDuration = Integer.parseInt(sc.nextLine().trim());
+                    if (loanDuration <= 0) {
+                        ConsoleUI.printError("Duration must be at least 1 month.");
+                        continue;
+                    }
+                    break;
+                } catch (NumberFormatException e) {
+                    ConsoleUI.printError("Enter a valid integer.");
+                }
+            }
+
+            newAccount = AccountFactory.createNewLoan(
+                customerId, loanPrincipal, status, opened,
+                interestRate, loanDuration);
+            bank.openAccountForCustomer(customerId, newAccount);
+            newAccount.recordTransaction("Deposit", loanPrincipal, -1, "Success", "Loan principal disbursed");
+            BankStorage.saveData(bank);
+            ConsoleUI.printSuccess("Loan account created successfully. Account number: "
+                    + newAccount.getAccountNo());
+            return;
         }
 
         // 3. Validate initial deposit
         double initialDeposit;
 
         while (true) {
-            System.out.print("Enter initial deposit: Rs. ");
+            ConsoleUI.printPrompt("Enter initial deposit: Rs. ");
 
             try {
                 initialDeposit =
@@ -221,13 +315,13 @@ public class OperatorMenu {
 
                 if (!Double.isFinite(initialDeposit) ||
                     initialDeposit < 0) {
-                    System.out.println("Enter a valid non-negative amount.");
+                    ConsoleUI.printError("Enter a valid non-negative amount.");
                     continue;
                 }
 
                 if (choice == 1 &&
                     initialDeposit < SavingsAccount.getMinimumBalance()) {
-                    System.out.println("Minimum Savings balance is Rs. " +
+                    ConsoleUI.printError("Minimum Savings balance is Rs. " +
                         SavingsAccount.getMinimumBalance());
                     continue;
                 }
@@ -236,38 +330,32 @@ public class OperatorMenu {
                 // opening-balance constants/getters in your Account classes.
                 if (choice == 2 &&
                     initialDeposit < CurrentAccount.getMinimumBalance()) {
-                    System.out.println("Insufficient opening deposit.");
+                    ConsoleUI.printError("Insufficient opening deposit.");
                     continue;
                 }
 
                 if (choice == 3 &&
                     initialDeposit < FixedDepositAccount.getMinimumBalance()) {
-                    System.out.println("Insufficient opening deposit.");
+                    ConsoleUI.printError("Insufficient opening deposit.");
                     continue;
                 }
 
                 break;
             } catch (NumberFormatException e) {
-                System.out.println("Enter a valid amount.");
+                ConsoleUI.printError("Enter a valid amount.");
             }
         }
 
-        AccountStatus status = AccountStatus.ACTIVE;
-        LocalDate opened = LocalDate.now();
-        Account newAccount;
-
         // 4. Construct the appropriate subclass
         if (choice == 1) {
-            newAccount = new SavingsAccount(
-                -1, customerId,
-                initialDeposit, status, opened);
-                bank.openAccountForCustomer(customerId, newAccount);
+            newAccount = AccountFactory.createNewSavingsAccount(
+                customerId, initialDeposit, status, opened);
+            bank.openAccountForCustomer(customerId, newAccount);
                 
-            } else if (choice == 2) {
-                newAccount = new CurrentAccount(
-                    -1, customerId,
-                    initialDeposit, status, opened);
-                    bank.openAccountForCustomer(customerId, newAccount);
+        } else if (choice == 2) {
+            newAccount = AccountFactory.createNewCurrentAccount(
+                customerId, initialDeposit, status, opened);
+            bank.openAccountForCustomer(customerId, newAccount);
 
         } else {
             // Find the customer's Savings accounts
@@ -285,8 +373,7 @@ public class OperatorMenu {
             }
 
             if (savingsAccounts.isEmpty()) {
-                System.out.println(
-                    "Open an active Savings Account before creating an FD.");
+                ConsoleUI.printError("Open an active Savings Account before creating an FD.");
                 return;
             }
 
@@ -300,7 +387,7 @@ public class OperatorMenu {
                         savingsAccounts.get(i));
                 }
 
-                System.out.print("Enter choice: ");
+                ConsoleUI.printPrompt("Enter choice: ");
 
                 try {
                     int selected =
@@ -313,16 +400,16 @@ public class OperatorMenu {
                         break;
                     }
 
-                    System.out.println("Invalid choice.");
+                    ConsoleUI.printError("Invalid choice.");
                 } catch (NumberFormatException e) {
-                    System.out.println("Enter a valid number.");
+                    ConsoleUI.printError("Enter a valid number.");
                 }
             }
 
             int tenureMonths;
 
             while (true) {
-                System.out.print("Enter FD tenure (6, 12, 24, 36 months): ");
+                ConsoleUI.printPrompt("Enter FD tenure (6, 12, 24, 36 months): ");
 
                 try {
                     tenureMonths =
@@ -333,37 +420,37 @@ public class OperatorMenu {
                         break;
                     }
 
-                    System.out.println("Invalid tenure.");
+                    ConsoleUI.printError("Invalid tenure.");
                 } catch (NumberFormatException e) {
-                    System.out.println("Enter a valid number.");
+                    ConsoleUI.printError("Enter a valid number.");
                 }
             }
 
-            newAccount = new FixedDepositAccount(
-                -1, customerId,
-                initialDeposit, status, opened,
+            newAccount = AccountFactory.createNewFixedDepositAccount(
+                customerId, initialDeposit, status, opened,
                 linkedSavingsAccountNo, tenureMonths);
-                bank.openAccountForCustomer(customerId, newAccount);
+            bank.openAccountForCustomer(customerId, newAccount);
         }
 
         newAccount.recordTransaction("Deposit", initialDeposit, -1, "Success", "Opening deposit");
         BankStorage.saveData(bank);
-        System.out.println("Account created successfully. Account number: " + newAccount.getAccountNo());
+        ConsoleUI.printSuccess("Account created successfully. Account number: "
+                + newAccount.getAccountNo());
     }
 
     private static void unlock_a_customer_login(Scanner sc, Bank bank) {
-        System.out.print("Enter Customer ID: ");
+        ConsoleUI.printPrompt("Enter Customer ID: ");
         int customerId;
 
         try {
             customerId = Integer.parseInt(sc.nextLine().trim());
         } catch (NumberFormatException e) {
-            System.out.println("Invalid input! Please enter a numeric Customer ID.");
+            ConsoleUI.printError("Invalid input! Please enter a numeric Customer ID.");
             return;
         }
 
         if (!bank.findCustomer(customerId)) {
-            System.out.println("Customer with ID " + customerId + " not found.");
+            ConsoleUI.printError("Customer with ID " + customerId + " not found.");
             return;
         }
 
@@ -373,54 +460,52 @@ public class OperatorMenu {
             customer.setLocked(false);
             customer.setFailedLoginAttempts(0); // Reset counter back to 0
             BankStorage.saveData(bank);         // Persist the unlocked state
-            System.out.println("Done! Customer " + customerId + " (" + customer.getName() + ") has been unlocked.");
+            ConsoleUI.printSuccess("Customer " + customerId + " (" + customer.getName()
+                    + ") has been unlocked.");
         } else {
-            System.out.println("Customer " + customerId + " (" + customer.getName() + ") is already unlocked.");
+            ConsoleUI.printInfo("Customer " + customerId + " (" + customer.getName()
+                    + ") is already unlocked.");
         }
 }
 
     private static void run_monthly_interest(Bank bank) {
         Map<Integer, Account> accounts = bank.getAccountMap();
-        int creditedCount = 0;
+        int processedCount = 0;
         int skippedAlreadyPaidCount = 0;
-        double totalInterestPaid = 0.0;
 
         for (Account acc : accounts.values()) {
-            // Only process ACTIVE Savings accounts (FR-14)
-            if (acc.getAccountType() == AccountType.SAVINGS &&
-                acc.getStatus() == AccountStatus.ACTIVE) {
+            if (acc.getStatus() == AccountStatus.ACTIVE && acc instanceof MonthlyInterestBearing) {
+                MonthlyInterestBearing interestBearingAcc = (MonthlyInterestBearing) acc;
 
-                SavingsAccount savingsAcc = (SavingsAccount) acc;
-
-                // Prevent paying interest twice in the same month (Section 10)
-                if (savingsAcc.hasReceivedInterestThisMonth()) {
+                // Prevent processing interest twice in the same calendar month
+                if (interestBearingAcc.hasReceivedInterestThisMonth()) {
                     skippedAlreadyPaidCount++;
                     continue;
                 }
 
-                double lowestBal = savingsAcc.getLowestBalanceThisMonth();
-                double interest = savingsAcc.creditMonthlyInterest();
-
-                if (interest > 0) {
-                    creditedCount++;
-                    totalInterestPaid += interest;
-                    System.out.printf(
-                        "Account %d: Lowest Monthly Balance = Rs. %.2f | Interest Credited = Rs. %.2f | New Balance = Rs. %.2f%n",
-                        savingsAcc.getAccountNo(), lowestBal, interest, savingsAcc.getBalance()
-                    );
+                String cycleResult = interestBearingAcc.processMonthlyInterestCycle();
+                if (cycleResult != null && !cycleResult.isBlank()) {
+                    processedCount++;
+                    ConsoleUI.printInfo(cycleResult);
                 }
             }
         }
 
-        if (creditedCount > 0) {
+        if (processedCount > 0) {
             BankStorage.saveData(bank);
-            System.out.printf("Monthly interest cycle complete. Credited %d account(s) with a total of Rs. %.2f.%n",
-                    creditedCount, totalInterestPaid);
+            ConsoleUI.printSuccess(String.format(
+                    "Monthly interest cycle complete. Processed %d interest-bearing account(s).",
+                    processedCount));
         } else if (skippedAlreadyPaidCount > 0) {
-            System.out.println("Monthly interest has already been credited for all eligible Savings accounts this month.");
+            ConsoleUI.printInfo("Monthly interest has already been processed for all eligible "
+                    + "interest-bearing accounts this month.");
         } else {
-            System.out.println("No eligible active Savings accounts found for interest calculation.");
+            ConsoleUI.printInfo("No eligible active interest-bearing accounts found for monthly calculation.");
         }
+    }
+
+    private static void export_summary_report(Scanner sc, Bank bank) {
+        ReportService.generateAndExportBankSummaryReport(bank);
     }
 
     public static void menu(Scanner sc , Bank bank){
@@ -433,31 +518,46 @@ public class OperatorMenu {
                 sc.nextLine(); // Consume newline
                 switch(choice){
                     case 1 :
-                        create_new_customer(sc,bank);
+                    ConsoleUI.printSectionHeader("CREATE NEW CUSTOMER");
+                    create_new_customer(sc,bank);
+                    ConsoleUI.pauseForEnter(sc);
+                    break;
+                case 2 :
+                    ConsoleUI.printSectionHeader("OPEN NEW ACCOUNT");
+                    open_new_account(sc , bank);
+                    ConsoleUI.pauseForEnter(sc);
+                    break;
+                case 3 : 
+                    ConsoleUI.printSectionHeader("VIEW CUSTOMERS AND ACCOUNTS");
+                    view_all_customers_and_accounts(sc , bank);
+                    ConsoleUI.pauseForEnter(sc);
                         break;
-                    case 2 :
-                        open_new_account(sc , bank);
-                        break;
-                    case 3 : 
-                        view_all_customers_and_accounts(sc , bank);
-                        break;
-                    case 4 : 
-                        unlock_a_customer_login(sc , bank);
-                        break;
-                    case 5 : 
-                        run_monthly_interest(bank);
-                        break;
-                    case 6 : 
-                        System.out.println("Exiting to main menu !!");
-                        return;
-                    default : 
-                        System.out.println("You Entered wrong choice , try again !!");
+                case 4 : 
+                    ConsoleUI.printSectionHeader("UNLOCK CUSTOMER LOGIN");
+                    unlock_a_customer_login(sc , bank);
+                    ConsoleUI.pauseForEnter(sc);
+                    break;
+                case 5 : 
+                    ConsoleUI.printSectionHeader("RUN MONTHLY INTEREST");
+                    run_monthly_interest(bank);
+                    ConsoleUI.pauseForEnter(sc);
+                    break;
+                case 6 : 
+                    ConsoleUI.printSectionHeader("EXPORT SUMMARY REPORT");
+                    export_summary_report(sc, bank);
+                    ConsoleUI.pauseForEnter(sc);
+                    break;
+                case 7 : 
+                    ConsoleUI.printInfo("Returning to main menu.");
+                    return;
+                default : 
+                    ConsoleUI.printError("You entered an invalid choice. Please try again.");
                 }
                
             }
             else{
-                System.out.println("Invalid input , try again !!");
-                sc.next();
+                ConsoleUI.printError("Invalid input. Please try again.");
+                sc.nextLine();
             }
 
 

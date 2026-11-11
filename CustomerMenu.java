@@ -2,43 +2,51 @@ package Banking_system.Code;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 
 public class CustomerMenu {
     
+    private static void validateCustomerAccess(Bank bank, int customerId) throws AuthenticationException {
+        if (!bank.findCustomer(customerId)) {
+            throw new AuthenticationException("Customer with ID " + customerId + " not found.");
+        }
+        Customer customer = bank.getCustomer(customerId);
+        if (customer.isLocked()) {
+            throw new AuthenticationException("Your account login is locked due to multiple failed attempts. Please contact a Bank Operator.");
+        }
+    }
+
     private static Customer authenticateCustomer(Scanner sc, Bank bank) {
-        System.out.print("Enter Customer ID: ");
+        ConsoleUI.printPrompt("Enter Customer ID: ");
         int customerId;
 
         try {
             customerId = Integer.parseInt(sc.nextLine().trim());
         } catch (NumberFormatException e) {
-            System.out.println("Invalid Customer ID format.");
+            ConsoleUI.printError("Invalid Customer ID format.");
             return null;
         }
 
-        if (!bank.findCustomer(customerId)) {
-            System.out.println("Customer not found.");
-            return null;
-        }
-
-        Customer customer = bank.getCustomer(customerId);
-
-        // FR-2: Check if login is already locked
-        if (customer.isLocked()) {
-            System.out.println("Your account login is locked due to multiple failed attempts. Please contact a Bank Operator.");
+        Customer customer;
+        try {
+            validateCustomerAccess(bank, customerId);
+            customer = bank.getCustomer(customerId);
+        } catch (AuthenticationException e) {
+            ConsoleUI.printError(e.getMessage());
             return null;
         }
 
         // Give up to 3 attempts in this session (or remaining attempts before hitting 3)
         while (customer.getFailedLoginAttempts() < 3) {
-            System.out.print("Enter PIN: ");
+            ConsoleUI.printPrompt("Enter PIN: ");
             String inputPin = sc.nextLine().trim();
 
             if (customer.getPin().equals(inputPin)) {
                 customer.setFailedLoginAttempts(0);
                 BankStorage.saveData(bank);
-                System.out.println("Login successful. Welcome, " + customer.getName() + ".");
+                ConsoleUI.printSuccess("Login successful. Welcome, " + customer.getName() + ".");
                 return customer;
             } else {
                 int attempts = customer.getFailedLoginAttempts() + 1;
@@ -47,11 +55,15 @@ public class CustomerMenu {
                 if (attempts >= 3) {
                     customer.setLocked(true);
                     BankStorage.saveData(bank);
-                    System.out.println("Incorrect PIN. 3 failed attempts reached! Your login is now LOCKED.");
+                    try {
+                        throw new AuthenticationException("Incorrect PIN. 3 failed attempts reached! Your login is now LOCKED.");
+                    } catch (AuthenticationException e) {
+                        ConsoleUI.printError(e.getMessage());
+                    }
                     return null;
                 } else {
                     BankStorage.saveData(bank);
-                    System.out.println("Incorrect PIN. Attempts remaining: " + (3 - attempts));
+                    ConsoleUI.printError("Incorrect PIN. Attempts remaining: " + (3 - attempts));
                 }
             }
         }
@@ -62,21 +74,25 @@ public class CustomerMenu {
     // Reusable helper: Shows owned accounts and returns the one selected by Account Number
     private static Account selectCustomerAccount(Scanner sc, Bank bank, Customer customer) {
         if (customer.getOwnedAccountList().isEmpty()) {
-            System.out.println("You do not have any accounts yet.");
+            ConsoleUI.printInfo("You do not have any accounts yet.");
             return null;
         }
 
-        System.out.println("\n--- Your Accounts ---");
+        ConsoleUI.printSectionHeader("YOUR ACCOUNTS");
+        String[] headers = {"Acc No", "Account Type", "Status", "Current Balance (Rs.)",
+                "Account Specifics / Rules"};
+        int[] widths = {8, 16, 12, 22, 34};
+        List<String[]> rows = new ArrayList<>();
         for (int accNo : customer.getOwnedAccountList()) {
             Account acc = bank.getAccountMap().get(accNo);
             if (acc != null) {
-                System.out.printf("   -> Account No: %d | Type: %s | Status: %s%n",
-                    acc.getAccountNo(), acc.getAccountType(), acc.getStatus());
+                rows.add(accountTableRow(acc));
             }
         }
+        ConsoleUI.printTable(headers, rows, widths, -1);
 
         while (true) {
-            System.out.print("Enter Account Number (or 0 to cancel): ");
+            ConsoleUI.printPrompt("Enter Account Number (or 0 to cancel): ");
             try {
                 int selectedAccNo = Integer.parseInt(sc.nextLine().trim());
 
@@ -86,7 +102,8 @@ public class CustomerMenu {
 
                 // Ensure the customer actually owns this account number
                 if (!customer.getOwnedAccountList().contains(selectedAccNo)) {
-                    System.out.println("Invalid choice! You do not own an account with number " + selectedAccNo + ".");
+                    ConsoleUI.printError("Invalid choice! You do not own an account with number "
+                            + selectedAccNo + ".");
                     continue;
                 }
 
@@ -95,7 +112,7 @@ public class CustomerMenu {
                     return selectedAccount;
                 }
             } catch (NumberFormatException e) {
-                System.out.println("Invalid input! Please enter a valid numeric Account Number.");
+                ConsoleUI.printError("Invalid input! Please enter a valid numeric Account Number.");
             }
         }
     }
@@ -107,12 +124,23 @@ public class CustomerMenu {
             return; // User had no accounts or pressed 0 to cancel
         }
 
-        System.out.println("\n========== ACCOUNT BALANCE ==========");
-        System.out.printf("Account Number : %d%n", selectedAcc.getAccountNo());
-        System.out.printf("Account Type   : %s%n", selectedAcc.getAccountType());
-        System.out.printf("Account Status : %s%n", selectedAcc.getStatus());
-        System.out.printf("Current Balance: Rs. %.2f%n", selectedAcc.getBalance());
-        System.out.println("=====================================\n");
+        ConsoleUI.printSectionHeader("ACCOUNT BALANCE");
+        ConsoleUI.printTable(
+                new String[]{"Acc No", "Account Type", "Status", "Current Balance (Rs.)",
+                        "Account Specifics / Rules"},
+                java.util.Collections.singletonList(accountTableRow(selectedAcc)),
+                new int[]{8, 16, 12, 22, 34},
+                -1);
+    }
+
+    private static String[] accountTableRow(Account account) {
+        return new String[]{
+                String.valueOf(account.getAccountNo()),
+                String.valueOf(account.getAccountType()),
+                String.valueOf(account.getStatus()),
+                String.format("%.2f", account.getBalance()),
+                account.getSpecificDetails()
+        };
     }
 
     // Helper to get the most recently recorded transaction on an account
@@ -131,16 +159,16 @@ public class CustomerMenu {
             return;
         }
 
-        System.out.print("Enter deposit amount: Rs. ");
+        ConsoleUI.printPrompt("Enter deposit amount: Rs. ");
         double amount;
         try {
             amount = Double.parseDouble(sc.nextLine().trim());
             if (!Double.isFinite(amount)) {
-                System.out.println("Invalid amount entered.");
+                ConsoleUI.printError("Invalid amount entered.");
                 return;
             }
         } catch (NumberFormatException e) {
-            System.out.println("Invalid input! Please enter a valid numeric amount.");
+            ConsoleUI.printError("Invalid input! Please enter a valid numeric amount.");
             return;
         }
 
@@ -150,7 +178,7 @@ public class CustomerMenu {
                 "Deposit", amount, -1, "Failed", "Account is not Active (" + selectedAccount.getStatus() + ")"
             );
             BankStorage.saveData(bank);
-            System.out.println("Deposit failed! Reason: Account is " + selectedAccount.getStatus() + ".");
+            ConsoleUI.printError("Deposit failed! Reason: Account is " + selectedAccount.getStatus() + ".");
             return;
         }
 
@@ -160,11 +188,13 @@ public class CustomerMenu {
         Transaction lastTx = getLastTransaction(selectedAccount);
 
         if (success) {
-            System.out.println("Deposit successful. Transaction ID: " + (lastTx != null ? lastTx.getTransactionId() : "N/A"));
-            System.out.printf("New balance for Account %d: Rs. %.2f%n", selectedAccount.getAccountNo(), selectedAccount.getBalance());
+            ConsoleUI.printSuccess("Deposit successful. Transaction ID: "
+                    + (lastTx != null ? lastTx.getTransactionId() : "N/A"));
+            ConsoleUI.printInfo(String.format("New balance for Account %d: Rs. %.2f",
+                    selectedAccount.getAccountNo(), selectedAccount.getBalance()));
         } else {
             String reason = (lastTx != null) ? lastTx.getFailureReason() : "Invalid deposit";
-            System.out.println("Deposit failed! Reason: " + reason);
+            ConsoleUI.printError("Deposit failed! Reason: " + reason);
         }
     }
 
@@ -175,16 +205,16 @@ public class CustomerMenu {
             return;
         }
 
-        System.out.print("Enter withdrawal amount: Rs. ");
+        ConsoleUI.printPrompt("Enter withdrawal amount: Rs. ");
         double amount;
         try {
             amount = Double.parseDouble(sc.nextLine().trim());
             if (!Double.isFinite(amount)) {
-                System.out.println("Invalid amount entered.");
+                ConsoleUI.printError("Invalid amount entered.");
                 return;
             }
         } catch (NumberFormatException e) {
-            System.out.println("Invalid input! Please enter a valid numeric amount.");
+            ConsoleUI.printError("Invalid input! Please enter a valid numeric amount.");
             return;
         }
 
@@ -194,7 +224,7 @@ public class CustomerMenu {
                 "Withdrawal", amount, -1, "Failed", "Account is not Active (" + selectedAccount.getStatus() + ")"
             );
             BankStorage.saveData(bank);
-            System.out.println("Withdrawal failed! Reason: Account is " + selectedAccount.getStatus() + ".");
+            ConsoleUI.printError("Withdrawal failed! Reason: Account is " + selectedAccount.getStatus() + ".");
             return;
         }
 
@@ -204,12 +234,46 @@ public class CustomerMenu {
         Transaction lastTx = getLastTransaction(selectedAccount);
 
         if (success) {
-            System.out.println("Withdrawal successful. Transaction ID: " + (lastTx != null ? lastTx.getTransactionId() : "N/A"));
-            System.out.printf("New balance for Account %d: Rs. %.2f%n", selectedAccount.getAccountNo(), selectedAccount.getBalance());
+            ConsoleUI.printSuccess("Withdrawal successful. Transaction ID: "
+                    + (lastTx != null ? lastTx.getTransactionId() : "N/A"));
+            ConsoleUI.printInfo(String.format("New balance for Account %d: Rs. %.2f",
+                    selectedAccount.getAccountNo(), selectedAccount.getBalance()));
         } else {
             String reason = (lastTx != null) ? lastTx.getFailureReason() : "Invalid withdrawal";
-            System.out.println("Withdrawal failed! Reason: " + reason);
+            ConsoleUI.printError("Withdrawal failed! Reason: " + reason);
         }
+    }
+
+    private static Account validateTransferPreConditions(Bank bank, Account sourceAcc, int destAccNo, double amount)
+            throws InvalidTransactionException {
+        if (sourceAcc.getStatus() != Account.AccountStatus.ACTIVE) {
+            throw new InvalidTransactionException("Your source account is " + sourceAcc.getStatus() + ".");
+        }
+
+        if (sourceAcc.getAccountNo() == destAccNo) {
+            throw new InvalidTransactionException("Cannot transfer to the same account.");
+        }
+
+        Account destAcc = bank.getAccountMap().get(destAccNo);
+        if (destAcc == null) {
+            throw new InvalidTransactionException("Destination account " + destAccNo + " does not exist.");
+        }
+
+        if (destAcc.getStatus() != Account.AccountStatus.ACTIVE) {
+            throw new InvalidTransactionException("Destination account is " + destAcc.getStatus() + ".");
+        }
+
+        if (destAcc.getAccountType() == Account.AccountType.FIXED_DEPOSIT) {
+            throw new InvalidTransactionException("Fixed Deposit accounts do not accept incoming transfers.");
+        }
+
+        if (destAcc.getAccountType() == Account.AccountType.LOAN && amount > destAcc.getBalance()) {
+            throw new InvalidTransactionException(
+                String.format("Transfer amount exceeds remaining loan balance of Rs. %.2f.", destAcc.getBalance())
+            );
+        }
+
+        return destAcc;
     }
 
     // Option 4: Transfer Funds (FR-12, FR-13, FR-21)
@@ -221,63 +285,37 @@ public class CustomerMenu {
         }
 
         // 2. Ask for destination account number
-        System.out.print("Enter Destination Account Number: ");
+        ConsoleUI.printPrompt("Enter Destination Account Number: ");
         int destAccNo;
         try {
             destAccNo = Integer.parseInt(sc.nextLine().trim());
         } catch (NumberFormatException e) {
-            System.out.println("Invalid input! Please enter a numeric Account Number.");
+            ConsoleUI.printError("Invalid input! Please enter a numeric Account Number.");
             return;
         }
 
         // 3. Ask for transfer amount
-        System.out.print("Enter transfer amount: Rs. ");
+        ConsoleUI.printPrompt("Enter transfer amount: Rs. ");
         double amount;
         try {
             amount = Double.parseDouble(sc.nextLine().trim());
             if (!Double.isFinite(amount)) {
-                System.out.println("Invalid amount entered.");
+                ConsoleUI.printError("Invalid amount entered.");
                 return;
             }
         } catch (NumberFormatException e) {
-            System.out.println("Invalid input! Please enter a valid numeric amount.");
+            ConsoleUI.printError("Invalid input! Please enter a valid numeric amount.");
             return;
         }
 
-        // 4. All-or-Nothing Pre-Validation (FR-12, FR-13, FR-21)
-        if (sourceAcc.getStatus() != Account.AccountStatus.ACTIVE) {
-            sourceAcc.recordTransaction("Transfer-out", amount, destAccNo, "Failed", "Source account is not Active");
+        // 4. All-or-Nothing Pre-Validation with Custom Exception (FR-12, FR-13, FR-21)
+        Account destAcc;
+        try {
+            destAcc = validateTransferPreConditions(bank, sourceAcc, destAccNo, amount);
+        } catch (InvalidTransactionException e) {
+            sourceAcc.recordTransaction("Transfer-out", amount, destAccNo, "Failed", e.getMessage());
             BankStorage.saveData(bank);
-            System.out.println("Transfer failed! Reason: Your source account is " + sourceAcc.getStatus() + ".");
-            return;
-        }
-
-        if (sourceAcc.getAccountNo() == destAccNo) {
-            sourceAcc.recordTransaction("Transfer-out", amount, destAccNo, "Failed", "Source and destination accounts cannot be the same");
-            BankStorage.saveData(bank);
-            System.out.println("Transfer failed! Reason: Cannot transfer to the same account.");
-            return;
-        }
-
-        Account destAcc = bank.getAccountMap().get(destAccNo);
-        if (destAcc == null) {
-            sourceAcc.recordTransaction("Transfer-out", amount, destAccNo, "Failed", "Destination account does not exist");
-            BankStorage.saveData(bank);
-            System.out.println("Transfer failed! Reason: Destination account " + destAccNo + " does not exist.");
-            return;
-        }
-
-        if (destAcc.getStatus() != Account.AccountStatus.ACTIVE) {
-            sourceAcc.recordTransaction("Transfer-out", amount, destAccNo, "Failed", "Destination account is not Active");
-            BankStorage.saveData(bank);
-            System.out.println("Transfer failed! Reason: Destination account is " + destAcc.getStatus() + ".");
-            return;
-        }
-
-        if (destAcc.getAccountType() == Account.AccountType.FIXED_DEPOSIT) {
-            sourceAcc.recordTransaction("Transfer-out", amount, destAccNo, "Failed", "Cannot transfer into a Fixed Deposit account");
-            BankStorage.saveData(bank);
-            System.out.println("Transfer failed! Reason: Fixed Deposit accounts do not accept incoming transfers.");
+            ConsoleUI.printError("Transfer failed! Reason: " + e.getMessage());
             return;
         }
 
@@ -287,14 +325,17 @@ public class CustomerMenu {
             BankStorage.saveData(bank);
 
             Transaction lastTx = getLastTransaction(sourceAcc);
-            System.out.println("Transfer successful! Transaction ID: " + (lastTx != null ? lastTx.getTransactionId() : "N/A"));
-            System.out.printf("Transferred Rs. %.2f from Account %d to Account %d.%n", amount, sourceAcc.getAccountNo(), destAccNo);
-            System.out.printf("New balance for Account %d: Rs. %.2f%n", sourceAcc.getAccountNo(), sourceAcc.getBalance());
+            ConsoleUI.printSuccess("Transfer successful! Transaction ID: "
+                    + (lastTx != null ? lastTx.getTransactionId() : "N/A"));
+            ConsoleUI.printInfo(String.format("Transferred Rs. %.2f from Account %d to Account %d.",
+                    amount, sourceAcc.getAccountNo(), destAccNo));
+            ConsoleUI.printInfo(String.format("New balance for Account %d: Rs. %.2f",
+                    sourceAcc.getAccountNo(), sourceAcc.getBalance()));
         } else {
             BankStorage.saveData(bank);
             Transaction lastTx = getLastTransaction(sourceAcc);
             String reason = (lastTx != null) ? lastTx.getFailureReason() : "Transfer rejected";
-            System.out.println("Transfer failed! Reason: " + reason);
+            ConsoleUI.printError("Transfer failed! Reason: " + reason);
         }
     }
 
@@ -306,49 +347,49 @@ public class CustomerMenu {
         }
 
         int count = 10; // Default to last 10 (FR-17)
-        System.out.print("Enter number of recent transactions to view (Press Enter for default 10): ");
+        ConsoleUI.printPrompt("Enter number of recent transactions to view (Press Enter for default 10): ");
         String input = sc.nextLine().trim();
 
         if (!input.isEmpty()) {
             try {
                 int parsed = Integer.parseInt(input);
                 if (parsed <= 0) {
-                    System.out.println("Count must be positive. Using default of 10.");
+                    ConsoleUI.printWarning("Count must be positive. Using default of 10.");
                 } else {
                     count = parsed;
                 }
             } catch (NumberFormatException e) {
-                System.out.println("Invalid number entered. Using default of 10.");
+                ConsoleUI.printWarning("Invalid number entered. Using default of 10.");
             }
         }
 
         java.util.List<Transaction> history = selectedAcc.getTransactionHistory();
-        System.out.println("\n================ RECENT TRANSACTIONS ================");
-        System.out.printf("Account No: %d | Type: %s | Current Balance: Rs. %.2f%n",
-                selectedAcc.getAccountNo(), selectedAcc.getAccountType(), selectedAcc.getBalance());
-        System.out.println("-----------------------------------------------------");
-
         if (history.isEmpty()) {
-            System.out.println("No transactions found for this account.");
-            System.out.println("=====================================================\n");
+            ConsoleUI.printInfo("No transactions found for this account.");
             return;
         }
 
         int startIndex = Math.max(0, history.size() - count);
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
-
+        List<String[]> rows = new ArrayList<>();
         for (int i = startIndex; i < history.size(); i++) {
             Transaction tx = history.get(i);
-            System.out.printf("[%s] ID: %s | Type: %-12s | Amt: Rs. %8.2f | Status: %-7s | Bal: Rs. %9.2f | Note: %s%n",
+            rows.add(new String[]{
                     tx.getTimestamp().format(dtf),
                     tx.getTransactionId(),
                     tx.getType(),
-                    tx.getAmount(),
+                    String.format("%.2f", tx.getAmount()),
                     tx.getStatus(),
-                    tx.getResultingBalance(),
-                    tx.getFailureReason());
+                    String.format("%.2f", tx.getResultingBalance()),
+                    tx.getFailureReason()
+            });
         }
-        System.out.println("=====================================================\n");
+        ConsoleUI.printTable(
+                new String[]{"Date & Time", "TXN ID", "Type", "Amount (Rs.)", "Status",
+                        "Balance (Rs.)", "Remarks / Reason"},
+                rows,
+                new int[]{19, 18, 14, 14, 9, 15, 32},
+                4);
     }
 
     // Option 6: Generate Statement for Date Range & Save to File (FR-18, FR-19)
@@ -365,130 +406,36 @@ public class CustomerMenu {
 
         while (true) {
             try {
-                System.out.print("Enter Start Date (dd-MM-yyyy): ");
+                ConsoleUI.printPrompt("Enter Start Date (dd-MM-yyyy): ");
                 startDate = LocalDate.parse(sc.nextLine().trim(), dateFormatter);
 
-                System.out.print("Enter End Date (dd-MM-yyyy): ");
+                ConsoleUI.printPrompt("Enter End Date (dd-MM-yyyy): ");
                 endDate = LocalDate.parse(sc.nextLine().trim(), dateFormatter);
 
                 if (endDate.isBefore(startDate)) {
-                    System.out.println("End date cannot be earlier than start date! Try again.");
+                    ConsoleUI.printError("End date cannot be earlier than start date! Try again.");
                     continue;
                 }
                 break;
             } catch (java.time.format.DateTimeParseException e) {
-                System.out.println("Invalid date format! Please use dd-MM-yyyy.");
+                ConsoleUI.printError("Invalid date format! Please use dd-MM-yyyy.");
             }
         }
 
-        java.util.List<Transaction> history = selectedAcc.getTransactionHistory();
-        java.util.List<Transaction> txInRange = new java.util.ArrayList<>();
-
-        double openingBalance = 0.0;
-        boolean openingSet = false;
-        double totalCredits = 0.0;
-        double totalDebits = 0.0;
-
-        for (Transaction tx : history) {
-            LocalDate txDate = tx.getTimestamp().toLocalDate();
-            boolean isSuccess = "Success".equals(tx.getStatus());
-            boolean isCredit = "Deposit".equals(tx.getType()) ||
-                               "Transfer-in".equals(tx.getType()) ||
-                               "Interest".equals(tx.getType());
-
-            // Track balance prior to startDate
-            if (txDate.isBefore(startDate)) {
-                if (isSuccess) {
-                    openingBalance = tx.getResultingBalance();
-                    openingSet = true;
-                }
-            } else if (!txDate.isAfter(endDate)) {
-                // First successful transaction on or after startDate helps establish openingBalance if none prior
-                if (!openingSet && isSuccess) {
-                    openingBalance = isCredit
-                            ? (tx.getResultingBalance() - tx.getAmount())
-                            : (tx.getResultingBalance() + tx.getAmount());
-                    openingSet = true;
-                }
-
-                txInRange.add(tx);
-
-                if (isSuccess) {
-                    if (isCredit) {
-                        totalCredits += tx.getAmount();
-                    } else {
-                        totalDebits += tx.getAmount();
-                    }
-                }
-            } else {
-                // Transaction is after endDate
-                if (!openingSet && isSuccess) {
-                    openingBalance = isCredit
-                            ? (tx.getResultingBalance() - tx.getAmount())
-                            : (tx.getResultingBalance() + tx.getAmount());
-                    openingSet = true;
-                }
-            }
-        }
-
-        // If no transactions ever occurred, or account opened before startDate with no tx
-        if (!openingSet) {
-            if (!startDate.isBefore(selectedAcc.getOpened())) {
-                openingBalance = selectedAcc.getBalance();
-            } else {
-                openingBalance = 0.0;
-            }
-        }
-
-        double closingBalance = openingBalance + totalCredits - totalDebits;
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
-
-        // Build the statement text using StringBuilder so we can both print and save it (FR-19)
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n==================== ACCOUNT STATEMENT ====================\n");
-        sb.append(String.format("Customer Name   : %s (ID: %d)%n", customer.getName(), customer.getCustomerID()));
-        sb.append(String.format("Account Number  : %d (%s)%n", selectedAcc.getAccountNo(), selectedAcc.getAccountType()));
-        sb.append(String.format("Statement Period: %s to %s%n", startDate, endDate));
-        sb.append("-----------------------------------------------------------\n");
-        sb.append(String.format("Opening Balance : Rs. %.2f%n", openingBalance));
-        sb.append("-----------------------------------------------------------\n");
-
-        if (txInRange.isEmpty()) {
-            sb.append("No transactions recorded during this period.\n");
-        } else {
-            for (Transaction tx : txInRange) {
-                sb.append(String.format("[%s] %-12s | %-12s | Rs. %8.2f | %-7s | Bal: Rs. %9.2f | %s%n",
-                        tx.getTimestamp().format(dtf),
-                        tx.getTransactionId(),
-                        tx.getType(),
-                        tx.getAmount(),
-                        tx.getStatus(),
-                        tx.getResultingBalance(),
-                        tx.getFailureReason()));
-            }
-        }
-
-        sb.append("-----------------------------------------------------------\n");
-        sb.append(String.format("Total Credits   : Rs. %.2f%n", totalCredits));
-        sb.append(String.format("Total Debits    : Rs. %.2f%n", totalDebits));
-        sb.append(String.format("Closing Balance : Rs. %.2f%n", closingBalance));
-        sb.append("===========================================================\n");
+        // Delegate statement generation to ReportService (SRP)
+        String statementText = ReportService.generateAccountStatement(customer, selectedAcc, startDate, endDate);
 
         // 1. Print on screen (FR-18)
-        System.out.print(sb.toString());
+        System.out.print(statementText);
 
         // 2. Offer to save to a text file (FR-19)
-        System.out.print("Would you like to save this statement to a text file? (y/n): ");
+        ConsoleUI.printPrompt("Would you like to save this statement to a text file? (y/n): ");
         String saveChoice = sc.nextLine().trim();
         if (saveChoice.equalsIgnoreCase("y")) {
             String fileName = "Statement_Acc" + selectedAcc.getAccountNo() + "_" + startDate + "_to_" + endDate + ".txt";
-            java.nio.file.Path filePath = java.nio.file.Paths.get("data", fileName);
-            try {
-                java.nio.file.Files.createDirectories(filePath.getParent());
-                java.nio.file.Files.writeString(filePath, sb.toString());
-                System.out.println("Statement saved successfully to: " + filePath.toAbsolutePath());
-            } catch (java.io.IOException e) {
-                System.out.println("Failed to save statement file: " + e.getMessage());
+            java.nio.file.Path filePath = ReportService.saveReportToFile(fileName, statementText);
+            if (filePath != null) {
+                ConsoleUI.printSuccess("Statement saved successfully to: " + filePath.toAbsolutePath());
             }
         }
     }
@@ -496,16 +443,17 @@ public class CustomerMenu {
 
     // Option 7: Open Additional Account OR Close Account / FD (FR-7, FR-15, FR-16)
     private static void manage_accounts(Scanner sc, Bank bank, Customer customer) {
-        System.out.println("\n1. Open a New Additional Account");
-        System.out.println("2. Close an Existing Account / Redeem Fixed Deposit");
-        System.out.println("3. Cancel");
-        System.out.print("Enter choice: ");
+        ConsoleUI.printMenuCard("ACCOUNT MANAGEMENT",
+                "Open a New Additional Account",
+                "Close an Existing Account / Redeem Fixed Deposit",
+                "Cancel");
+        ConsoleUI.printPrompt();
 
         int subChoice;
         try {
             subChoice = Integer.parseInt(sc.nextLine().trim());
         } catch (NumberFormatException e) {
-            System.out.println("Invalid choice.");
+            ConsoleUI.printError("Invalid choice.");
             return;
         }
 
@@ -524,7 +472,7 @@ public class CustomerMenu {
         }
 
         if (selectedAcc.getStatus() == Account.AccountStatus.CLOSED) {
-            System.out.println("This account is already CLOSED.");
+            ConsoleUI.printWarning("This account is already CLOSED.");
             return;
         }
 
@@ -534,7 +482,8 @@ public class CustomerMenu {
             Account payoutAcc = bank.getAccountMap().get(fd.getLinkedSavingsAccountNo());
 
             if (payoutAcc == null || payoutAcc.getStatus() != Account.AccountStatus.ACTIVE) {
-                System.out.println("Cannot close FD: Linked payout Savings Account (" + fd.getLinkedSavingsAccountNo() + ") is not Active.");
+                ConsoleUI.printError("Cannot close FD: Linked payout Savings Account ("
+                        + fd.getLinkedSavingsAccountNo() + ") is not Active.");
                 return;
             }
 
@@ -580,15 +529,17 @@ public class CustomerMenu {
 
         // Case B: Savings or Current Account Closure (FR-7: Balance must be 0)
         if (Math.abs(selectedAcc.getBalance()) > 0.001) {
-            System.out.printf("Cannot close Account %d! Balance must be Rs. 0.00 (Current balance: Rs. %.2f).%n",
-                    selectedAcc.getAccountNo(), selectedAcc.getBalance());
-            System.out.println("Please withdraw or transfer out the remaining funds first.");
+            ConsoleUI.printError(String.format(
+                    "Cannot close Account %d! Balance must be Rs. 0.00 (Current balance: Rs. %.2f).",
+                    selectedAcc.getAccountNo(), selectedAcc.getBalance()));
+            ConsoleUI.printInfo("Please withdraw or transfer out the remaining funds first.");
             return;
         }
 
         selectedAcc.setStatus(Account.AccountStatus.CLOSED);
         BankStorage.saveData(bank);
-        System.out.println("Account " + selectedAcc.getAccountNo() + " has been successfully CLOSED.");
+        ConsoleUI.printSuccess("Account " + selectedAcc.getAccountNo()
+            + " has been successfully CLOSED.");
     }
 
     public static void menu(Scanner sc, Bank bank) {
@@ -600,49 +551,67 @@ public class CustomerMenu {
 
         int choice;
         while (true) {
-            System.out.println("\n1. View Balance");
-            System.out.println("2. Deposit");
-            System.out.println("3. Withdraw");
-            System.out.println("4. Transfer Funds");
-            System.out.println("5. View Recent Transactions");
-            System.out.println("6. Generate Statement");
-            System.out.println("7. Open an Additional Account / Close Account");
-            System.out.println("8. Logout");
-            System.out.print("Enter your choice : ");
+            ConsoleUI.printMenuHeader("MAIN MENU > CUSTOMER PORTAL | Logged in: "
+                    + loggedInCustomer.getName() + " (ID: "
+                    + loggedInCustomer.getCustomerID() + ")");
+            ConsoleUI.printMenuCard("CUSTOMER ACTIONS",
+                    "View Balance",
+                    "Deposit",
+                    "Withdraw",
+                    "Transfer Funds",
+                    "View Recent Transactions",
+                    "Generate Statement",
+                    "Open an Additional Account / Close Account",
+                    "Logout");
+            ConsoleUI.printPrompt();
 
             if (sc.hasNextInt()) {
                 choice = sc.nextInt();
                 sc.nextLine(); // <-- FIXED: Consume newline!
                 switch (choice) {
                     case 1:
+                        ConsoleUI.printSectionHeader("VIEW BALANCE");
                         view_balance(sc, bank, loggedInCustomer);
+                        ConsoleUI.pauseForEnter(sc);
                         break;
                     case 2:
+                        ConsoleUI.printSectionHeader("DEPOSIT");
                         deposit(sc, bank, loggedInCustomer);
+                        ConsoleUI.pauseForEnter(sc);
                         break;
                     case 3:
+                        ConsoleUI.printSectionHeader("WITHDRAW");
                         withdraw(sc, bank, loggedInCustomer);
+                        ConsoleUI.pauseForEnter(sc);
                         break;
                     case 4:
+                        ConsoleUI.printSectionHeader("TRANSFER FUNDS");
                         transfer_funds(sc, bank, loggedInCustomer);
+                        ConsoleUI.pauseForEnter(sc);
                         break;
                     case 5:
+                        ConsoleUI.printSectionHeader("VIEW RECENT TRANSACTIONS");
                         view_recent_transactions(sc, bank, loggedInCustomer);
+                        ConsoleUI.pauseForEnter(sc);
                         break;
                     case 6:
+                        ConsoleUI.printSectionHeader("GENERATE STATEMENT");
                         generate_statement(sc, bank, loggedInCustomer);
+                        ConsoleUI.pauseForEnter(sc);
                         break;
                     case 7:
+                        ConsoleUI.printSectionHeader("MANAGE ACCOUNTS");
                         manage_accounts(sc, bank, loggedInCustomer); // <-- FIXED: Hooked up Option 7!
+                        ConsoleUI.pauseForEnter(sc);
                         break;
                     case 8:
-                        System.out.println("Logged out. Goodbye.");
+                        ConsoleUI.printInfo("Logged out. Goodbye.");
                         return; // <-- FIXED: Changed break to return!
                     default:
-                        System.out.println("You Entered wrong choice , try again !!");
+                        ConsoleUI.printError("You entered an invalid choice. Please try again.");
                 }
             } else {
-                System.out.println("Invalid input , try again !!");
+                ConsoleUI.printError("Invalid input. Please try again.");
                 sc.nextLine();
             }
         }
